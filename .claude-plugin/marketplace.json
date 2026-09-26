@@ -1584,6 +1584,19 @@
       "homepage": "https://github.com/anthropics/claude-plugins-public/tree/main/external_plugins/terraform"
     },
     {
+      "name": "tradingview",
+      "description": "TradingView MCP server for market data and technical analysis. Query real-time prices, technical indicators, candlestick patterns, screeners, multi-timeframe analysis, and strategy backtests for stocks, crypto, and forex across global exchanges.",
+      "author": {
+        "name": "atilaahmettaner"
+      },
+      "category": "productivity",
+      "source": "./external_plugins/tradingview",
+      "homepage": "https://github.com/atilaahmettaner/tradingview-mcp",
+      "tags": [
+        "community-managed"
+      ]
+    },
+    {
       "name": "typescript-lsp",
       "description": "TypeScript/JavaScript language server for enhanced code intelligence",
       "version": "1.0.0",
