@@ -1,0 +1,10 @@
+{
+  "name": "tradingview",
+  "description": "TradingView MCP server for market data and technical analysis. Query real-time prices, technical indicators, candlestick patterns, screeners, multi-timeframe analysis, and strategy backtests for stocks, crypto, and forex across global exchanges.",
+  "author": {
+    "name": "atilaahmettaner"
+  },
+  "homepage": "https://github.com/atilaahmettaner/tradingview-mcp",
+  "repository": "https://github.com/atilaahmettaner/tradingview-mcp",
+  "license": "MIT"
+}
