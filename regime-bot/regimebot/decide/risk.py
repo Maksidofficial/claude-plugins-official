@@ -73,6 +73,13 @@ class RiskGate:
     def __init__(self, kill: KillSwitch) -> None:
         self.kill = kill
 
+    def guard(self, acct: Account) -> bool:
+        """Run every candle, order or not. Returns True when the kill switch is active."""
+        dd = 1 - acct.equity / acct.peak_equity
+        if dd >= LIMITS.max_drawdown_pct:
+            self.kill.fire(f"max_drawdown {dd:.2%} >= {LIMITS.max_drawdown_pct:.0%}")
+        return self.kill.active()
+
     def check(
         self,
         order: Order,

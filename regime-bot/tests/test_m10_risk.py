@@ -103,3 +103,9 @@ def test_kill_only_cleared_by_reset(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         k.fire("z")
         k.reset(confirm="")
+
+
+def test_guard_fires_kill_without_an_order(gate: RiskGate) -> None:
+    assert not gate.guard(acct(equity=95_000.0))
+    assert gate.guard(acct(equity=89_999.0))
+    assert gate.kill.active()
