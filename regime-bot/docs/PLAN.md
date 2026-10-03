@@ -1,4 +1,4 @@
-# regime-bot — Build Plan (Gate 3 of 3: awaiting approval)
+# regime-bot — Build Plan (Gate 3 of 3: approved)
 
 Spec (approved): `docs/SPEC.md`. Architecture (approved): `docs/ARCHITECTURE.md`.
 Built in Claude Code; the Layer 1 model is Claude Opus 5.5 only.
