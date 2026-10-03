@@ -1,6 +1,6 @@
-# grok-bot — Specification (Gate 1 of 3: awaiting approval)
+# grok-bot — Specification (Gate 1 of 3: approved)
 
-Status: DRAFT. No code is written until this spec is approved.
+Status: APPROVED (gate 1).
 Every value marked **[default]** was chosen because the brief left it open; change any of them before approving.
 
 ## 1. Scope
