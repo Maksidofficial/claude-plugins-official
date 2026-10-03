@@ -1,17 +1,17 @@
-# grok-bot — Architecture (Gate 2 of 3: awaiting approval)
+# regime-bot — Architecture (Gate 2 of 3: approved)
 
-Spec: `docs/SPEC.md` (approved). No code is written until this document is approved.
+Spec: `docs/SPEC.md` (approved). Status: APPROVED (gate 2).
 
 ## 1. Repository layout
 
 ```
-grok-bot/
+regime-bot/
 ├── pyproject.toml            # pinned deps, pytest/ruff/mypy config
 ├── .env.example              # ALPACA_KEY_ID, ALPACA_SECRET, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, ANTHROPIC_API_KEY
 ├── .gitignore                # .env, data/, state/, logs/
 ├── config/
 │   └── params.toml           # tunable thresholds (switching, refit, costs). Not limits.
-├── grokbot/
+├── regimebot/
 │   ├── limits.py             # L3  HARD LIMITS: frozen constants, no I/O, no imports from L1
 │   ├── clock.py              # L3  single source of "now"; Candle.closed_at contract
 │   ├── data/
@@ -38,7 +38,7 @@ grok-bot/
 │   │   ├── gates.py          # acceptance gates -> GateResult (pass/fail per gate)
 │   │   └── calibration.py    # Brier + reliability per state
 │   ├── research/             # L1 — offline only, never imported by engine/exec
-│   │   ├── model.py          # ResearchModel protocol; AnthropicResearch (Opus 5.5)
+│   │   ├── model.py          # Claude Opus 5.5 client (Anthropic SDK)
 │   │   ├── nightly.py        # gather session -> prompt -> proposals/ (files only)
 │   │   └── validate.py       # harness: apply proposal on a branch, rerun gates, accept/reject
 │   ├── ops/
@@ -51,8 +51,8 @@ grok-bot/
 ├── rules/losses.md           # one rule per loss (L1 appends, human reviews)
 ├── strategy.md               # accepted strategy or "NO STRATEGY ACCEPTED"
 ├── deploy/
-│   ├── grokbot.service       # systemd, Restart=always
-│   ├── grokbot-nightly.timer # nightly research + report
+│   ├── regimebot.service       # systemd, Restart=always
+│   ├── regimebot-nightly.timer # nightly research + report
 │   └── watchdog.sh           # heartbeat check -> kill switch + alert
 └── tests/
 ```
@@ -61,7 +61,7 @@ grok-bot/
 
 | Boundary | Enforcement |
 |---|---|
-| L1 never touches the trading path | `tests/test_imports.py` uses an AST scan to assert that nothing under `engine`, `decide`, `exec`, `live` imports `grokbot.research`. |
+| L1 never touches the trading path | `tests/test_imports.py` uses an AST scan to assert that nothing under `engine`, `decide`, `exec`, `live` imports `regimebot.research`. |
 | L1 output is files only | Research writes to `proposals/`. Only `validate.py` can promote a proposal, and only after the gates pass. |
 | Hard limits are not writable | `limits.py` holds module-level `Final` constants and a frozen dataclass. No loader reads them from config or env. A test asserts that `limits.py` has no `open`, `os.environ` or `toml` usage. |
 | Playbooks can only tighten | `risk.py` computes `effective = min(playbook.max_size, limits.MAX_POSITION_PCT, limits.STATE_LEVERAGE[state])`. |
@@ -110,7 +110,7 @@ that is what lets paper trading be compared to the backtest line for line.
   `closed_at` is later than `clock.now()`.
 - **Structural guarantee:** the filter is incremental (`step`). There is no API that takes a
   full series and returns decisions, so smoothing has nowhere to happen. `hmmlearn.predict`
-  and `predict_proba` are banned from `grokbot/` outside `fit.py` (AST test).
+  and `predict_proba` are banned from `regimebot/` outside `fit.py` (AST test).
 - **Fills:** SimBroker fills market orders at `open(t+1)` plus slippage, never at `close(t)`.
 - **Refits:** a refit at t uses data ≤ t, and the new model takes effect from candle t+1.
 - **Proof test:** run the engine on N candles, then on candles 1..k with k+1..N replaced by
@@ -134,9 +134,9 @@ alert.
 
 | Unit | Runs | Restart |
 |---|---|---|
-| `grokbot.service` | `live.py` + dashboard (localhost only, reached over an SSH tunnel) | `Restart=always`, `RestartSec=10` |
-| `grokbot-nightly.timer` | after close: report → research → validate | oneshot |
-| `grokbot-watchdog.timer` | every minute: heartbeat older than 3 min during RTH → kill + alert | oneshot |
+| `regimebot.service` | `live.py` + dashboard (localhost only, reached over an SSH tunnel) | `Restart=always`, `RestartSec=10` |
+| `regimebot-nightly.timer` | after close: report → research → validate | oneshot |
+| `regimebot-watchdog.timer` | every minute: heartbeat older than 3 min during RTH → kill + alert | oneshot |
 
 Broker-side bracket stops mean a dead process still has protective stops in place.
 
@@ -153,7 +153,7 @@ Every model swap is journaled with both summaries.
 ## 8. Nightly L1 flow
 
 `nightly.py` collects the journal, fills, wrong-state calls and the current playbooks, then
-calls `ResearchModel.review()`. Output goes to `proposals/<date>/` as diffs plus a rationale.
+calls Opus 5.5. Output goes to `proposals/<date>/` as diffs plus a rationale.
 `validate.py` then:
 
 1. applies the diffs to a temp worktree
@@ -164,15 +164,14 @@ If every gate passes, the proposal is promoted (git commit, tagged). If not, it 
 with the reason logged. L1 never sees the gate code's verdict before it writes its proposal,
 and never grades its own output.
 
-Model: `claude-opus-5-5` via the Anthropic SDK, with a `ResearchModel` protocol so a different
-provider can be plugged in. If the API is unavailable, the night is skipped and trading is
+Model: `claude-opus-5-5` (Claude only) via the Anthropic SDK. If the API is unavailable, the night is skipped and trading is
 unaffected.
 
 ## 9. Rollback
 
 - **Code:** every module ships behind its own PR and tag, so rollback is `git revert` plus a
   service restart.
-- **Model:** `state/models/` keeps every artifact; `grokbot rollback-model <date>` loads one.
+- **Model:** `state/models/` keeps every artifact; `regimebot rollback-model <date>` loads one.
 - **Playbooks and strategy:** git-tracked, and every promotion is a tagged commit.
 - **Live:** the kill switch always flattens first.
 

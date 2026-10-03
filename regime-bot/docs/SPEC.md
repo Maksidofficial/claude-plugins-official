@@ -1,4 +1,4 @@
-# grok-bot — Specification (Gate 1 of 3: approved)
+# regime-bot — Specification (Gate 1 of 3: approved)
 
 Status: APPROVED (gate 1).
 Every value marked **[default]** was chosen because the brief left it open; change any of them before approving.
@@ -11,8 +11,8 @@ deterministic code owns every decision and every order.
 
 | Item | Value |
 |---|---|
-| Name | grok-bot |
-| Layer 1 model | Opus 5.5 (`claude-opus-5-5`), called behind a `ResearchModel` interface so another provider (e.g. Grok) can be swapped in without touching Layers 2–3 **[default]** |
+| Name | regime-bot |
+| Layer 1 model | Opus 5.5 (`claude-opus-5-5`) via the Anthropic SDK, run from Claude Code. Claude only. |
 | Venue | Alpaca **paper** **[default]** |
 | Asset | SPY **[default]** |
 | Timeframe | 1-hour candles, regular trading hours **[default]** |
