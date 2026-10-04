@@ -132,7 +132,7 @@ def is_last_bar(c: Candle, session_close: time | None = time(16, 0), tz: ZoneInf
     o, t = c.opened_at.astimezone(tz), c.closed_at.astimezone(tz)
     close = t.replace(hour=session_close.hour, minute=session_close.minute, second=0,
                       microsecond=0)
-    return o < close <= t
+    return bool(o < close <= t)
 
 
 def round_qty(q: float, step: float) -> float:
