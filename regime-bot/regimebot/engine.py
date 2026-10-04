@@ -11,7 +11,7 @@ import json
 import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
@@ -57,6 +57,9 @@ class Context:
     approved: bool
     now: datetime
     bar: timedelta = timedelta(hours=1)
+    qty_step: float = 1.0  # 1 share for equities; e.g. 1e-5 for BTC
+    session_close: time | None = time(16, 0)  # None: market never closes (crypto)
+    tz: ZoneInfo = NY  # calendar for the daily loss limit and the session close
 
 
 @dataclass
@@ -122,11 +125,18 @@ def stretch(log_closes: list[float]) -> float:
     return float((a[-1] - a.mean()) / sd) if sd > 0 else math.nan
 
 
-def is_last_bar(c: Candle) -> bool:
-    """True for the bar that spans the 16:00 New York close."""
-    o, t = c.opened_at.astimezone(NY), c.closed_at.astimezone(NY)
-    close = t.replace(hour=16, minute=0, second=0, microsecond=0)
+def is_last_bar(c: Candle, session_close: time | None = time(16, 0), tz: ZoneInfo = NY) -> bool:
+    """True for the bar that spans the session close. Never true without a session close."""
+    if session_close is None:
+        return False
+    o, t = c.opened_at.astimezone(tz), c.closed_at.astimezone(tz)
+    close = t.replace(hour=session_close.hour, minute=session_close.minute, second=0,
+                      microsecond=0)
     return o < close <= t
+
+
+def round_qty(q: float, step: float) -> float:
+    return math.floor(q / step + 1e-9) * step
 
 
 def _exit_reason(pb: Playbook, st: EngineState, dec: SwitchDecision, sig: dict[str, float],
@@ -172,7 +182,7 @@ def on_candle(state: EngineState, candle: Candle, ctx: Context) -> tuple[EngineS
 
     # account bookkeeping
     st.peak_equity = max(st.peak_equity or ctx.equity, ctx.equity)
-    day = candle.opened_at.astimezone(NY).date().isoformat()
+    day = candle.opened_at.astimezone(ctx.tz).date().isoformat()
     if day != st.day:
         st.day, st.day_start_equity = day, ctx.equity
     acct = Account(ctx.equity, st.peak_equity, st.day_start_equity or ctx.equity, ctx.position_qty)
@@ -255,12 +265,12 @@ def on_candle(state: EngineState, candle: Candle, ctx: Context) -> tuple[EngineS
             reasons.append(f"entry {pb.style} {sized:.3f}")
         else:
             target = 0.0
-    last_bar = is_last_bar(candle)
+    last_bar = is_last_bar(candle, ctx.session_close, ctx.tz)
     if last_bar and target > LIMITS.max_overnight_pct:
         target = LIMITS.max_overnight_pct
         reasons.append("overnight cap")
 
-    desired = math.floor(target * ctx.equity / candle.close) if target > 0 else 0.0
+    desired = round_qty(target * ctx.equity / candle.close, ctx.qty_step) if target > 0 else 0.0
     if 0 < pos_frac and target == pos_frac:
         desired = ctx.position_qty
     delta = float(desired - ctx.position_qty)

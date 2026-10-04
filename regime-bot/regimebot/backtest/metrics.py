@@ -69,9 +69,9 @@ def trades_from_fills(fills: list[Fill]) -> list[Trade]:
     return out
 
 
-def daily_returns(equity: pd.Series) -> pd.Series:
+def daily_returns(equity: pd.Series, tz: str = "America/New_York") -> pd.Series:
     idx = pd.DatetimeIndex(equity.index)
-    days = equity.groupby(idx.tz_convert("America/New_York").date if idx.tz else idx.date).last()
+    days = equity.groupby(idx.tz_convert(tz).date if idx.tz else idx.date).last()
     return days.pct_change().dropna()
 
 
@@ -81,11 +81,14 @@ def max_drawdown(equity: pd.Series) -> float:
     return float(np.max(1 - e / peak)) if len(e) else 0.0
 
 
-def summarize(equity: pd.Series, trades: list[Trade]) -> Metrics:
-    r = daily_returns(equity)
+def summarize(
+    equity: pd.Series, trades: list[Trade], days_per_year: int = TRADING_DAYS,
+    tz: str = "America/New_York",
+) -> Metrics:
+    r = daily_returns(equity, tz)
     sd = float(r.std(ddof=1)) if len(r) > 1 else 0.0
     mean = float(r.mean()) if len(r) else 0.0
-    sharpe = mean / sd * math.sqrt(TRADING_DAYS) if sd > 0 else 0.0
+    sharpe = mean / sd * math.sqrt(days_per_year) if sd > 0 else 0.0
     t = mean / (sd / math.sqrt(len(r))) if sd > 0 else 0.0
     wins = sum(1 for x in trades if x.pnl > 0)
     return Metrics(

@@ -312,3 +312,11 @@ def test_walkforward_never_looks_ahead(tmp_path_factory: pytest.TempPathFactory)
     assert past_a and past_a == past_b
     assert [s for s in a.swaps if s["at"] <= cut] == [s for s in b.swaps if s["at"] <= cut]
     assert [r.to_json() for r in a.records] != [r.to_json() for r in b.records]
+
+
+def test_summarize_annualization_param() -> None:
+    days = pd.date_range("2025-01-01", periods=5, freq="D", tz="UTC")
+    eq = pd.Series([100.0, 101.0, 100.0, 102.0, 103.0], index=days)
+    r = eq.pct_change().dropna()
+    m = summarize(eq, [], days_per_year=365)
+    assert m.sharpe == pytest.approx(r.mean() / r.std(ddof=1) * np.sqrt(365))

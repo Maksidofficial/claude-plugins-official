@@ -17,7 +17,7 @@ from __future__ import annotations
 import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -42,8 +42,6 @@ from regimebot.hmm.filter import RegimeFilter
 from regimebot.hmm.fit import RegimeModel, SelectionReport, fit_k, fit_regime_model
 from regimebot.hmm.labels import auto_label, relabel_refit, state_stats
 
-NY = ZoneInfo("America/New_York")
-
 
 @dataclass(frozen=True)
 class WFConfig:
@@ -65,6 +63,10 @@ class WFConfig:
     warmup_bars: int = 200
     bar: timedelta = timedelta(hours=1)
     ll_window: int = 35
+    qty_step: float = 1.0
+    session_close: time | None = time(16, 0)  # None for 24/7 markets
+    tz: str = "America/New_York"
+    days_per_year: int = 252
 
 
 @dataclass
@@ -129,6 +131,7 @@ def run_walkforward(bars: pd.DataFrame, cfg: WFConfig, playbooks_dir: Path) -> W
     ll_mon = _ll_monitor(model, train, cfg.ll_window)
 
     risk = RiskGate(KillSwitch(cfg.state_dir / "KILLED"))
+    tz = ZoneInfo(cfg.tz)
     broker = SimBroker(cfg.initial_cash, cfg.costs)
     state = EngineState.initial()
     kelly = {k: cfg.kelly_prior for k in ("CALM_UP", "CHOP", "STRESS", "CRASH")}
@@ -153,7 +156,7 @@ def run_walkforward(bars: pd.DataFrame, cfg: WFConfig, playbooks_dir: Path) -> W
                 r = math.log(c.close / prev_close)
                 p_up = 1.0 - float(np.sum(nps * norm.cdf((0.0 - mus) / sds)))
                 calib_rows.append((label, pit(r, nps, mus, sds), p_up, int(r > 0)))
-            day = c.closed_at.astimezone(NY).date()
+            day = c.closed_at.astimezone(tz).date()
             if day != last_day:
                 last_day = day
                 kelly = _kelly(trades_from_fills(broker.fills), cfg)
@@ -165,7 +168,8 @@ def run_walkforward(bars: pd.DataFrame, cfg: WFConfig, playbooks_dir: Path) -> W
             model=model, filt=filt, playbooks=books, risk=risk, switch=cfg.switch, kelly=kelly,
             calibrated=calibrated, frozen=frozen or ll_frozen, equity=broker.equity(c.close),
             position_qty=broker.qty, entry_price=broker.entry_price, approved=True,
-            now=c.closed_at, bar=cfg.bar,
+            now=c.closed_at, bar=cfg.bar, qty_step=cfg.qty_step,
+            session_close=cfg.session_close, tz=tz,
         )
         state, res = on_candle(state, c, ctx)
         if not trading:
@@ -232,9 +236,10 @@ def run_walkforward(bars: pd.DataFrame, cfg: WFConfig, playbooks_dir: Path) -> W
     time_in_state = {k: v / len(records) for k, v in counts.items()}
 
     oos_bars = bars.iloc[i_oos:].reset_index(drop=True)
-    _, bh = buy_and_hold(oos_bars, cfg.initial_cash, cfg.costs)
+    dpy, tzn = cfg.days_per_year, cfg.tz
+    _, bh = buy_and_hold(oos_bars, cfg.initial_cash, cfg.costs, dpy, tzn)
     statics = {
-        name: static_playbook(oos_bars, pb, cfg.initial_cash, cfg.costs)[1]
+        name: static_playbook(oos_bars, pb, cfg.initial_cash, cfg.costs, cfg.qty_step, dpy, tzn)[1]
         for name, pb in books.items() if pb.style != "flat"
     }
     baselines = {"buy_and_hold": bh}
@@ -245,6 +250,7 @@ def run_walkforward(bars: pd.DataFrame, cfg: WFConfig, playbooks_dir: Path) -> W
     return WFResult(
         equity=equity, fills=broker.fills, trades=trades, records=records, swaps=swaps,
         calibration=calibration_report(calib_rows, cfg.calib_min_n, cfg.calib_tol),
-        metrics=summarize(equity, trades), per_state=per_state, baselines=baselines,
+        metrics=summarize(equity, trades, cfg.days_per_year, cfg.tz),
+        per_state=per_state, baselines=baselines,
         time_in_state=time_in_state, final_model=model, selection=selection, notes=notes,
     )

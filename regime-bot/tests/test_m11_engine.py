@@ -1,4 +1,5 @@
 import json
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -205,3 +206,21 @@ def test_last_bar_spans_the_close(open_ny: str, close_ny: str, expected: bool) -
 def test_uncalibrated_label_never_sizes(model: RegimeModel, tmp_path: Path) -> None:
     _, out, _ = run(model, tmp_path, CANDLES, approved=True, calibrated={})
     assert all(not r.orders for r in out)
+
+
+def test_fractional_quantity_step(model: RegimeModel, tmp_path: Path) -> None:
+    from regimebot.engine import round_qty
+
+    assert round_qty(0.2345678, 1e-5) == pytest.approx(0.23456)
+    assert round_qty(12.9, 1.0) == 12.0
+
+
+def test_no_session_close_means_no_overnight_cap() -> None:
+    from datetime import datetime
+
+    from regimebot.engine import is_last_bar
+
+    c = Candle(datetime(2025, 3, 14, 19, 30, tzinfo=UTC), datetime(2025, 3, 14, 20, 30, tzinfo=UTC),
+               1.0, 1.0, 1.0, 1.0, 1.0)
+    assert is_last_bar(c) is True  # spans 16:00 New York (equities default)
+    assert is_last_bar(c, session_close=None) is False

@@ -11,11 +11,21 @@ from regimebot.backtest.metrics import Metrics, Trade, summarize, trades_from_fi
 from regimebot.data.bars import frame_to_candles
 from regimebot.data.features import FeatureEngine
 from regimebot.decide.playbook import Playbook
-from regimebot.engine import STRETCH_WINDOW, TREND, OrderAction, entry_signal, stretch
+from regimebot.engine import (
+    STRETCH_WINDOW,
+    TREND,
+    OrderAction,
+    entry_signal,
+    round_qty,
+    stretch,
+)
 from regimebot.exec.broker import Fill, SimBroker
 
 
-def buy_and_hold(bars: pd.DataFrame, cash: float, costs: CostModel) -> tuple[pd.Series, Metrics]:
+def buy_and_hold(
+    bars: pd.DataFrame, cash: float, costs: CostModel, days_per_year: int = 252,
+    tz: str = "America/New_York",
+) -> tuple[pd.Series, Metrics]:
     first = float(bars["open"].iloc[0])
     px = costs.fill_price(first, 1)
     qty = cash / (px * (1 + costs.commission_bps / 1e4))
@@ -28,11 +38,12 @@ def buy_and_hold(bars: pd.DataFrame, cash: float, costs: CostModel) -> tuple[pd.
     eq.index = pd.DatetimeIndex(bars["closed_at"])
     t = Trade(str(bars["opened_at"].iloc[0]), str(bars["closed_at"].iloc[-1]), None,
               px, out_px, qty, final - cash, final / cash - 1)
-    return eq, summarize(eq, [t])
+    return eq, summarize(eq, [t], days_per_year, tz)
 
 
 def static_playbook(
-    bars: pd.DataFrame, pb: Playbook, cash: float, costs: CostModel
+    bars: pd.DataFrame, pb: Playbook, cash: float, costs: CostModel, qty_step: float = 1.0,
+    days_per_year: int = 252, tz: str = "America/New_York",
 ) -> tuple[pd.Series, Metrics, list[Fill]]:
     """Run one playbook as if its regime were always active, at its max size, no HMM."""
     broker = SimBroker(cash, costs)
@@ -57,7 +68,7 @@ def static_playbook(
                     broker.submit([OrderAction(-broker.qty, c.close, None, None, "exit")],
                                   c.closed_at.isoformat(), pb.state)
             elif entry_signal(pb, sig):
-                qty = math.floor(pb.max_size * broker.equity(c.close) / c.close)
+                qty = round_qty(pb.max_size * broker.equity(c.close) / c.close, qty_step)
                 if qty > 0:
                     broker.submit(
                         [OrderAction(qty, c.close, c.close * (1 - pb.stop_pct),
@@ -66,4 +77,5 @@ def static_playbook(
                     )
         eq.append(broker.equity(c.close))
     series = pd.Series(eq, index=pd.DatetimeIndex(bars["closed_at"]))
-    return series, summarize(series, trades_from_fills(broker.fills)), broker.fills
+    m = summarize(series, trades_from_fills(broker.fills), days_per_year, tz)
+    return series, m, broker.fills
