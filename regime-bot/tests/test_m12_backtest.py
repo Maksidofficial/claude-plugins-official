@@ -4,9 +4,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from regime_data import regime_bars
 from scipy.stats import norm
 
+from regime_data import regime_bars
 from regimebot.backtest.baselines import buy_and_hold, static_playbook
 from regimebot.backtest.calibration import (
     brier,

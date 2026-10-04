@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from regime_data import regime_bars
 
+from regime_data import regime_bars
 from regimebot.data.bars import Candle, frame_to_candles
 from regimebot.data.features import compute_features
 from regimebot.decide.playbook import load_playbooks

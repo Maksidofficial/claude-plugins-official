@@ -3,11 +3,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from conftest import make_bars
 from hmmlearn.hmm import GaussianHMM
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from conftest import make_bars
 from regimebot.data.bars import frame_to_candles
 from regimebot.data.features import FeatureEngine, Standardizer, compute_features
 from regimebot.hmm.filter import FilterError, RegimeFilter

@@ -51,20 +51,20 @@ def calibration_report(
 ) -> CalibrationReport:
     """rows: (label active at forecast time, PIT, predicted P(up), realized up 0/1)."""
     groups: dict[str, list[tuple[float, float, int]]] = defaultdict(list)
-    for label, u, p, up in rows:
-        groups[label].append((u, p, up))
+    for label, pit_v, p_up, up in rows:
+        groups[label].append((pit_v, p_up, up))
     per, ok, curves = {}, {}, {}
     for label, g in groups.items():
-        u = np.array([x[0] for x in g])
-        p = np.array([x[1] for x in g])
-        y = np.array([x[2] for x in g], dtype=float)
-        dev = reliability_max_dev(u)
+        pits: Vec = np.array([x[0] for x in g], dtype=np.float64)
+        probs: Vec = np.array([x[1] for x in g], dtype=np.float64)
+        y: Vec = np.array([x[2] for x in g], dtype=np.float64)
+        dev = reliability_max_dev(pits)
         per[label] = {
             "n": float(len(g)),
             "max_dev": dev,
-            "brier": brier(p, y),
+            "brier": brier(probs, y),
             "brier_climatology": brier(np.full_like(y, y.mean()), y),
         }
-        curves[label] = reliability_curve(u)
+        curves[label] = reliability_curve(pits)
         ok[label] = len(g) >= min_n and dev <= tol
     return CalibrationReport(per, ok, curves)
