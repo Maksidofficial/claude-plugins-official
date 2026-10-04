@@ -1,0 +1,18 @@
+[Unit]
+Description=regime-bot read-only dashboard (127.0.0.1:8765, reach it over an SSH tunnel)
+After=regimebot.service
+
+[Service]
+User=regimebot
+Group=regimebot
+WorkingDirectory=/opt/regime-bot
+ExecStart=/opt/regime-bot/.venv/bin/python -m regimebot.cli dashboard
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

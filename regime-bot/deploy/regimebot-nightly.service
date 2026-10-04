@@ -1,0 +1,15 @@
+[Unit]
+Description=regime-bot Opus 5.5 nightly review, gated promotion, daily report
+
+[Service]
+Type=oneshot
+User=regimebot
+Group=regimebot
+WorkingDirectory=/opt/regime-bot
+EnvironmentFile=/opt/regime-bot/.env
+ExecStart=/opt/regime-bot/.venv/bin/python -m regimebot.cli nightly
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/regime-bot/state /opt/regime-bot/playbooks /opt/regime-bot/rules /opt/regime-bot/proposals /opt/regime-bot/strategy.md

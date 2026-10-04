@@ -77,3 +77,21 @@ def render_report(rep: dict[str, Any]) -> str:
                  f"{'ok' if v['calibrated'] else 'NOT calibrated'} (n={int(v['n'])})"
                  for k, v in rep["calibration"].items()) or "not enough data")]
     return "\n".join(lines)
+
+
+def paper_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """What the preflight compares against the backtest."""
+    import pandas as pd
+
+    from regimebot.backtest.metrics import summarize
+
+    candles = [r for r in records if r.get("kind") == "candle" and r.get("equity") is not None]
+    if not candles:
+        return {"days": 0, "trades": 0, "sharpe": 0.0, "hit_rate": 0.0}
+    eq = pd.Series([float(r["equity"]) for r in candles],
+                   index=pd.DatetimeIndex([pd.Timestamp(r["ts"]) for r in candles]))
+    fills = [Fill(**f) for r in candles for f in r.get("fills", [])]
+    m = summarize(eq, trades_from_fills(fills), days_per_year=365, tz="UTC")
+    return {"days": len({str(r["ts"])[:10] for r in candles}), "trades": m.n_trades,
+            "sharpe": m.sharpe, "hit_rate": m.hit_rate, "max_dd": m.max_dd,
+            "total_return": m.total_return}

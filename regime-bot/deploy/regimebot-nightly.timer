@@ -1,0 +1,10 @@
+[Unit]
+Description=regime-bot nightly schedule
+
+[Timer]
+OnCalendar=*-*-* 00:20:00
+Persistent=true
+Unit=regimebot-nightly.service
+
+[Install]
+WantedBy=timers.target

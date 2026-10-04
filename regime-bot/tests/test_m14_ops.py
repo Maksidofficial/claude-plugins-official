@@ -135,3 +135,13 @@ def test_dashboard_refuses_public_bind(tmp_path: Path, model_file: Path) -> None
     r = LiveRunner(cfg(tmp_path, model_file), Feed(BARS))
     with pytest.raises(ValueError):
         serve(tmp_path, r.model, r.books, host="0.0.0.0", port=0)
+
+
+def test_paper_summary(tmp_path: Path, model_file: Path) -> None:
+    from regimebot.ops.report import paper_summary
+
+    r = LiveRunner(cfg(tmp_path, model_file, auto_approve=True), Feed(BARS))
+    drive(r, 0, 1400)
+    s = paper_summary(journal(tmp_path))
+    assert s["days"] == pytest.approx(1400 / 24, abs=1.5)
+    assert s["trades"] > 0 and 0 <= s["hit_rate"] <= 1 and "sharpe" in s

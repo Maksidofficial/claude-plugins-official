@@ -1,0 +1,15 @@
+[Unit]
+Description=regime-bot kill switch if the live loop stops heartbeating
+
+[Service]
+Type=oneshot
+User=regimebot
+Group=regimebot
+WorkingDirectory=/opt/regime-bot
+EnvironmentFile=/opt/regime-bot/.env
+ExecStart=/opt/regime-bot/.venv/bin/python -m regimebot.cli watchdog
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/regime-bot/state /opt/regime-bot/playbooks /opt/regime-bot/rules /opt/regime-bot/proposals /opt/regime-bot/strategy.md

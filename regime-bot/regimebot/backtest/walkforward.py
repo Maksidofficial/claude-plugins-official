@@ -14,6 +14,7 @@ Live, only a human does either.
 
 from __future__ import annotations
 
+import logging
 import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -41,6 +42,8 @@ from regimebot.hmm.drift import DriftThresholds, LiveLLMonitor, compare_models, 
 from regimebot.hmm.filter import RegimeFilter
 from regimebot.hmm.fit import RegimeModel, SelectionReport, fit_k, fit_regime_model
 from regimebot.hmm.labels import auto_label, relabel_refit, state_stats
+
+log = logging.getLogger("regimebot.walkforward")
 
 
 @dataclass(frozen=True)
@@ -214,6 +217,9 @@ def run_walkforward(bars: pd.DataFrame, cfg: WFConfig, playbooks_dir: Path) -> W
             else:
                 frozen, candidate = True, new
                 notes.append(f"{c.closed_at.isoformat()}: {why}, entries frozen")
+            log.info("refit %s accepted=%s alarms=%s equity=%.0f trades=%d",
+                     c.closed_at.date(), accepted, rep.alarms, broker.equity(c.close),
+                     len(broker.fills))
             while next_refit <= c.closed_at:
                 next_refit += timedelta(days=cfg.refit_days)
 

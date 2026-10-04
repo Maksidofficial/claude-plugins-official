@@ -3,5 +3,5 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 ruff check .
-mypy
+python3 -m mypy
 python3 -m pytest
