@@ -1,0 +1,22 @@
+[Unit]
+Description=regime-bot live paper trading
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=regimebot
+Group=regimebot
+WorkingDirectory=/opt/regime-bot
+EnvironmentFile=/opt/regime-bot/.env
+ExecStart=/opt/regime-bot/.venv/bin/python -m regimebot.cli live
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/regime-bot/state /opt/regime-bot/data
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

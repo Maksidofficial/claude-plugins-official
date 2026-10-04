@@ -1,0 +1,10 @@
+[Unit]
+Description=regime-bot watchdog schedule
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+Persistent=true
+Unit=regimebot-watchdog.service
+
+[Install]
+WantedBy=timers.target

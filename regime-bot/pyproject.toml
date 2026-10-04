@@ -1,0 +1,41 @@
+[project]
+name = "regimebot"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=2.0,<3",
+  "pandas>=2.2,<4",
+  "scipy>=1.13,<2",
+  "hmmlearn>=0.3.3,<0.4",
+  "threadpoolctl>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["anthropic>=1.11", "pydantic>=2.7", "pytest>=8", "hypothesis>=6", "ruff==0.15.20", "mypy==1.20.2", "pyarrow>=16"]
+research = ["anthropic>=1.11", "pydantic>=2.7"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["regimebot*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["regimebot", "conftest", "regime_data", "test_m13_live"]
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+packages = ["regimebot"]
