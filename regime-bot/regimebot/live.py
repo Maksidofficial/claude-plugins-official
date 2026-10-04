@@ -12,7 +12,7 @@ import json
 import logging
 import time as _time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
@@ -31,6 +31,7 @@ from regimebot.exec.approvals import ApprovalQueue
 from regimebot.exec.paper import PaperBroker
 from regimebot.hmm.filter import RegimeFilter
 from regimebot.hmm.fit import RegimeModel
+from regimebot.ops.alerts import Alerter
 
 log = logging.getLogger("regimebot.live")
 
@@ -60,17 +61,18 @@ class LiveConfig:
 
 
 class LiveRunner:
-    def __init__(self, cfg: LiveConfig, feed: Feed, alert: Callable[[str], None] | None = None):
+    def __init__(self, cfg: LiveConfig, feed: Feed, alerter: Alerter | None = None):
         self.cfg, self.feed = cfg, feed
-        self.alert = alert or (lambda msg: log.warning(msg))
         d = cfg.state_dir
         d.mkdir(parents=True, exist_ok=True)
+        self.alerter = alerter or Alerter(d / "alerts.jsonl", token=None, chat_id=None)
+        self._kill_alerted = False
         self.journal_path = d / "journal.jsonl"
         self.model = RegimeModel.from_dict(json.loads(cfg.model_path.read_text()))
         self.filt = RegimeFilter(self.model)
         self.books, errors = load_playbooks(cfg.playbooks_dir)
         for s, e in errors.items():
-            self.alert(f"playbook {s} rejected, that state trades flat: {e}")
+            self.alert("error", f"playbook {s} rejected, that state trades flat: {e}")
         self.risk = RiskGate(KillSwitch(d / "KILLED"))
         self.approvals = ApprovalQueue(d / "approvals.json")
         bp, ep = d / "broker.json", d / "engine.json"
@@ -78,6 +80,9 @@ class LiveRunner:
                        else PaperBroker(cash=cfg.initial_cash, costs=cfg.costs))
         self.state = EngineState.from_json(ep.read_text()) if ep.exists() else EngineState.initial()
         self._reconcile()
+
+    def alert(self, kind: str, msg: str) -> None:
+        self.alerter.send(kind, msg)
 
     # -- persistence -------------------------------------------------------------------
     def _journal(self, rec: dict[str, Any]) -> None:
@@ -108,7 +113,8 @@ class LiveRunner:
             reason = f"reconcile mismatch: journal {expected} vs broker {self.broker.qty}"
             self.risk.kill.fire(reason)
             self._journal({"kind": "reconcile", "reason": reason})
-            self.alert(f"KILL SWITCH: {reason}")
+            self.alert("kill", f"KILL SWITCH: {reason}")
+            self._kill_alerted = True
 
     # -- loop --------------------------------------------------------------------------
     def step(self, now: datetime) -> None:
@@ -119,6 +125,7 @@ class LiveRunner:
             df = self.feed(since, now)
         except Exception as e:  # network, parse: never fatal, staleness handles it
             self._journal({"kind": "fetch_error", "at": now.isoformat(), "error": str(e)[:300]})
+            self.alert("error", f"data fetch failed: {str(e)[:200]}")
             df = None
         if df is not None and len(df):
             for c in frame_to_candles(df):
@@ -128,7 +135,11 @@ class LiveRunner:
         self._check_stale(now, last)
 
     def _on_candle(self, c: Any, now: datetime) -> None:
+        n_before = len(self.broker.fills)
         self.broker.on_bar(c)
+        new_fills = self.broker.fills[n_before:]
+        for f in new_fills:
+            self.alert("fill", f"{f.reason}: {f.qty:+.5f} @ {f.price:.2f} ({f.state})")
         active = self.state.switch.get("active")
         approved = self.cfg.auto_approve or self.approvals.granted(active, now)
         ctx = Context(
@@ -143,12 +154,18 @@ class LiveRunner:
         self.broker.submit(res.orders, res.ts, res.decision.get("active"))
         for a in res.approvals:
             rid = self.approvals.request(a["qty"], a["price"], a["state"], now)
-            self.alert(f"approval needed {rid}: {a['qty']:+.5f} @ {a['price']:.2f} ({a['state']})")
+            self.alert("approval",
+                       f"approval needed {rid}: {a['qty']:+.5f} @ {a['price']:.2f} ({a['state']})")
         if res.decision.get("switched"):
-            self.alert(f"state switch -> {res.decision.get('active')}: {res.decision['reason']}")
+            self.alert("switch",
+                       f"state switch -> {res.decision.get('active')}: {res.decision['reason']}")
+        if self.risk.kill.active() and not self._kill_alerted:
+            self.alert("kill", f"KILL SWITCH active: {self.risk.kill.reason()}")
+            self._kill_alerted = True
         self._journal({
             "kind": "candle", "ts": res.ts, "result": json.loads(res.to_json()),
             "position_after": self.broker.qty, "equity": self.broker.equity(c.close),
+            "close": c.close, "fills": [asdict(f) for f in new_fills],
         })
         self._save()
 
@@ -165,7 +182,7 @@ class LiveRunner:
         self._journal({"kind": "stale", "at": now.isoformat(), "last_candle": last.isoformat(),
                        "orders": [{"qty": o.qty, "reason": o.reason}],
                        "position_after": self.broker.qty})
-        self.alert(f"stale data since {last.isoformat()}: flattening {self.broker.qty}")
+        self.alert("stale", f"stale data since {last.isoformat()}: flattening {self.broker.qty}")
         self._save()
 
 

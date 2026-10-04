@@ -1,4 +1,6 @@
+import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -33,3 +35,20 @@ def make_bars(n: int, seed: int = 0) -> pd.DataFrame:
 @pytest.fixture
 def bars() -> pd.DataFrame:
     return make_bars(400)
+
+
+@pytest.fixture(scope="module")
+def model_file(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A small model fitted on synthetic regimes, saved like a production artifact."""
+    from regime_data import regime_bars
+    from regimebot.data.features import compute_features
+    from regimebot.hmm.fit import fit_regime_model
+    from regimebot.hmm.labels import auto_label
+
+    bars, _ = regime_bars(1400, seed=4)
+    raw = compute_features(bars.iloc[:900]).dropna().to_numpy()
+    m, _ = fit_regime_model(raw, ks=(4,), restarts=2, seed=0)
+    m = m.with_labels(auto_label(m))
+    p = tmp_path_factory.mktemp("models") / "current.json"
+    p.write_text(json.dumps(m.to_dict()))
+    return p

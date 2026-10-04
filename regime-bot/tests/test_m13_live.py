@@ -8,27 +8,14 @@ import pytest
 
 from regime_data import regime_bars
 from regimebot.backtest.costs import CostModel
-from regimebot.data.features import compute_features
 from regimebot.decide.switcher import SwitchParams
 from regimebot.exec.approvals import ApprovalQueue
 from regimebot.exec.paper import PaperBroker
-from regimebot.hmm.fit import fit_regime_model
-from regimebot.hmm.labels import auto_label
 from regimebot.live import LiveConfig, LiveRunner
 
 ROOT = Path(__file__).resolve().parents[1]
 BARS, _ = regime_bars(1400, seed=4)
 H = timedelta(hours=1)
-
-
-@pytest.fixture(scope="module")
-def model_file(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    raw = compute_features(BARS.iloc[:900]).dropna().to_numpy()
-    m, _ = fit_regime_model(raw, ks=(4,), restarts=2, seed=0)
-    m = m.with_labels(auto_label(m))
-    p = tmp_path_factory.mktemp("models") / "current.json"
-    p.write_text(json.dumps(m.to_dict()))
-    return p
 
 
 class Feed:

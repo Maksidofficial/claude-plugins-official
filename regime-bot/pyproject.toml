@@ -33,7 +33,7 @@ target-version = "py311"
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["regimebot", "conftest", "regime_data"]
+known-first-party = ["regimebot", "conftest", "regime_data", "test_m13_live"]
 
 [tool.mypy]
 strict = true
