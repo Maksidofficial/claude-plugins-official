@@ -84,10 +84,7 @@ def test_same_seed_same_model() -> None:
     X = simulate(1200)
     a, _ = fit_regime_model(X, ks=(2, 3), restarts=3, seed=11)
     b, _ = fit_regime_model(X, ks=(2, 3), restarts=3, seed=11)
-    assert a.k == b.k
-    # Multithreaded BLAS reorders float sums; identical up to round-off.
-    for name in ("startprob", "transmat", "means", "covars"):
-        np.testing.assert_allclose(getattr(a, name), getattr(b, name), rtol=0, atol=1e-9)
+    assert a.to_dict() == b.to_dict()  # fitting pins BLAS to one thread: bit-identical
 
 
 def test_json_round_trip(fitted: tuple[RegimeModel, object]) -> None:

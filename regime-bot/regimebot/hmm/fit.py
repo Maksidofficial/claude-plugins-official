@@ -15,6 +15,7 @@ from typing import Any
 
 import numpy as np
 from hmmlearn.hmm import GaussianHMM
+from threadpoolctl import threadpool_limits
 
 from regimebot.data.features import Standardizer
 from regimebot.types import Vec
@@ -102,10 +103,10 @@ def _fit_best(Z: Vec, k: int, restarts: int, seed: int) -> GaussianHMM:
             n_components=k, covariance_type="full", n_iter=300, tol=1e-5, random_state=seed + r
         )
         try:
-            with warnings.catch_warnings():
+            with warnings.catch_warnings(), threadpool_limits(1):  # 1 thread: bit-reproducible
                 warnings.simplefilter("ignore")
                 m.fit(Z)
-            ll = float(m.score(Z))
+                ll = float(m.score(Z))
         except (ValueError, np.linalg.LinAlgError):
             continue
         if np.isfinite(ll) and ll > best_ll:
@@ -175,10 +176,10 @@ def _warm_fit(Z: Vec, init: RegimeModel, scaler: Standardizer, seed: int) -> Gau
     m.means_ = (raw_mu - scaler.mean) / scaler.std
     m.covars_ = raw_cov / np.outer(scaler.std, scaler.std)
     try:
-        with warnings.catch_warnings():
+        with warnings.catch_warnings(), threadpool_limits(1):
             warnings.simplefilter("ignore")
             m.fit(Z)
-        return m if np.isfinite(m.score(Z)) else None
+            return m if np.isfinite(m.score(Z)) else None
     except (ValueError, np.linalg.LinAlgError):
         return None
 
