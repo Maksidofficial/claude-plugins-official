@@ -37,7 +37,7 @@ def ctx_for(model: RegimeModel, tmp: Path, **kw: Any) -> Context:
         risk=RiskGate(KillSwitch(tmp / "KILLED")),
         switch=SwitchParams(),
         kelly={"CALM_UP": 2.0, "CHOP": 1.0, "STRESS": 0.5, "CRASH": 0.0},
-        calibrated=True,
+        calibrated={"CALM_UP": True, "CHOP": True, "STRESS": True, "CRASH": True},
         frozen=False,
         equity=100_000.0,
         position_qty=0.0,
@@ -200,3 +200,8 @@ def test_last_bar_spans_the_close(open_ny: str, close_ny: str, expected: bool) -
 
     c = Candle(at(open_ny), at(close_ny), 1.0, 1.0, 1.0, 1.0, 1.0)
     assert is_last_bar(c) is expected
+
+
+def test_uncalibrated_label_never_sizes(model: RegimeModel, tmp_path: Path) -> None:
+    _, out, _ = run(model, tmp_path, CANDLES, approved=True, calibrated={})
+    assert all(not r.orders for r in out)

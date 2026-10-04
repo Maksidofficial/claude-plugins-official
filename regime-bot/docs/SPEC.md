@@ -168,3 +168,21 @@ harness does.
   playbook. The drift freeze must catch this.
 - **Key leak.** Mitigation: keys are trade-only with no withdrawals, and an IP allowlist if
   the venue supports it.
+
+## Amendments found during the M3–M12 build (flagged to the owner)
+
+Each of these replaces a **[default]** above. Each is backed by a test, and the evidence is
+in the M12 commit.
+
+| # | Was | Now | Why |
+|---|---|---|---|
+| A1 | Features: 1-bar log return, 1-bar range, 1-bar volume ratio | 10-bar log return, 5-bar mean range, 5-bar volume ratio (rvol and trend unchanged) | With 1-bar inputs the HMM split states by the sign of each bar (expected durations of 1.8–2.5 bars), not by regime. With smoothed inputs, durations are 15–70 bars. |
+| A2 | Mean-shift drift: 2σ Mahalanobis | Any feature of a matched state moves more than 1.0 training std | Fitted state covariances are near-singular, so Mahalanobis flagged 0.45σ moves as 5.6σ. |
+| A3 | Live LL alarm: below the in-sample 5th percentile | Below the worst 35-bar window seen in training | A 5% threshold checked on every bar makes a false alarm near-certain; one fired on day 1. |
+| A4 | Labels from volatility rank only | Also: any state with vol > 2.5× the calmest state is at least STRESS. A label conflict means the label is inadmissible for the state's statistics. | A 5-state fit labeled a high-vol state CHOP (mean reversion at 0.5×). Near-tied calm states flipped CALM_UP/CHOP between refits, raising false alarms. |
+| A5 | Refit: fit from scratch | Warm-start EM from the current model (or the pending candidate). A random restart must beat it by more than 1% LL. K is fixed at refits. | Cold refits reshuffled rarely visited states every month. |
+| A6 | — | The transition matrix is floored at 1e-6, and the filter runs in log space | An exact-zero transition made the filter's normalizer underflow and crash on a crash-like bar. |
+| A7 | Calibration "per state" | Calibration is scored on the observable next-bar return forecast: the PIT reliability of the next-state-weighted mixture must be within ±0.10 at the deciles, plus Brier on P(up). It uses OOS history only, and sizing is zero for a label until that label passes. | True states are never observed. |
+| A8 | Beats a baseline | Higher Sharpe after costs, with total return reported alongside. Plus a minimum of 30 trades. | At a 20% cap, raw return can never beat SPY buy-and-hold. With few trades, the statistics are meaningless. |
+| A9 | — | Backtest-only stand-ins for humans: approvals are granted, and a drift freeze lifts on a clean refit or when two consecutive refits agree. Live, a human does both. | The backtest needs a deterministic rule. |
+| A10 | Kelly | Per label, from that label's closed OOS trades (≥ 20 trades). The prior until then is 0.4, which quarter-Kelly makes 10%. | The data must come from past trades only. |

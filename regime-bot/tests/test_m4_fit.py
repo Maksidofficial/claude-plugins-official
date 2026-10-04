@@ -94,3 +94,28 @@ def test_json_round_trip(fitted: tuple[RegimeModel, object]) -> None:
     model, _ = fitted
     again = RegimeModel.from_dict(model.to_dict())
     assert again.to_dict() == model.to_dict()
+
+
+def test_warm_start_refit_is_stable() -> None:
+    from regimebot.hmm.drift import DriftThresholds, compare_models
+    from regimebot.hmm.fit import fit_k
+    from regimebot.hmm.labels import auto_label, relabel_refit
+
+    X = simulate(3000, seed=21)
+    base = fit_k(X[:2000], 3, restarts=4, seed=0)
+    base = base.with_labels(auto_label(base))
+    for end in (2300, 2600, 3000):
+        new = relabel_refit(base, fit_k(X[:end], 3, restarts=4, seed=end, init=base))
+        rep = compare_models(base, new, DriftThresholds())
+        # this fixture's columns are not market features, so labels are arbitrary here;
+        # what warm starting must deliver is stable state means and transitions
+        assert rep.max_mean_shift_sigma < 0.2 and rep.transmat_l1 < 0.1, (end, rep)
+
+
+def test_random_restart_must_clearly_beat_warm_start() -> None:
+    from regimebot.hmm.fit import fit_k
+
+    X = simulate(1500, seed=3)
+    good = fit_k(X, 3, restarts=6, seed=0)
+    again = fit_k(X, 3, restarts=6, seed=99, init=good)
+    np.testing.assert_allclose(again.means, good.means, atol=0.05)

@@ -2,22 +2,23 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
+from regimebot.data.features import RET_BARS
 from regimebot.hmm.fit import RegimeModel, expected_durations
 
 LABELS = ("CALM_UP", "CHOP", "STRESS", "CRASH")
-RET, RVOL = 0, 1  # feature columns: logret, rvol
+RET, RVOL = 0, 1  # feature columns: ret10, rvol
+HIGH_VOL_MULT = 2.5  # any state this much more volatile than the calmest is at least STRESS
 
 
 @dataclass(frozen=True)
 class StateStats:
-    mean_ret: float  # raw log return per bar
-    vol: float  # raw std of log return within the state
+    mean_ret: float  # mean log return per bar (ret10 mean / 10)
+    vol: float  # mean realized one-bar volatility in the state (rvol mean)
     duration: float  # expected bars, 1 / (1 - A_ii)
 
 
@@ -31,9 +32,9 @@ def raw_covars(m: RegimeModel) -> np.ndarray:
 
 
 def state_stats(m: RegimeModel) -> list[StateStats]:
-    mu, cov, dur = raw_means(m), raw_covars(m), expected_durations(m.transmat)
+    mu, dur = raw_means(m), expected_durations(m.transmat)
     return [
-        StateStats(float(mu[i, RET]), math.sqrt(float(cov[i, RET, RET])), float(dur[i]))
+        StateStats(float(mu[i, RET]) / RET_BARS, max(float(mu[i, RVOL]), 1e-12), float(dur[i]))
         for i in range(m.k)
     ]
 
@@ -42,18 +43,36 @@ def auto_label(m: RegimeModel) -> list[str]:
     st = state_stats(m)
     by_vol = sorted(range(m.k), key=lambda i: st[i].vol)
     labels = ["CHOP"] * m.k
-    calm = by_vol
     if m.k >= 4:
         labels[by_vol[-1]] = "CRASH"
         labels[by_vol[-2]] = "STRESS"
-        calm = by_vol[:-2]
+        calm = list(by_vol[:-2])
     else:
         labels[by_vol[-1]] = "STRESS"
-        calm = by_vol[:-1]
+        calm = list(by_vol[:-1])
+    floor = HIGH_VOL_MULT * st[by_vol[0]].vol
+    for i in list(calm):
+        if st[i].vol > floor:
+            labels[i] = "STRESS"
+            calm.remove(i)
     best = max(calm, key=lambda i: st[i].mean_ret)
     if st[best].mean_ret > 0:
         labels[best] = "CALM_UP"
     return labels
+
+
+def admissible_labels(m: RegimeModel) -> list[set[str]]:
+    """Labels each state's statistics allow. High-volatility slots are exact; calm states may
+    be CHOP, or CALM_UP when their mean return is positive."""
+    st = state_stats(m)
+    auto = auto_label(m)
+    out: list[set[str]] = []
+    for i, lab in enumerate(auto):
+        if lab in ("STRESS", "CRASH"):
+            out.append({lab})
+        else:
+            out.append({"CALM_UP", "CHOP"} if st[i].mean_ret > 0 else {"CHOP"})
+    return out
 
 
 def _features(m: RegimeModel) -> np.ndarray:

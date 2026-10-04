@@ -49,7 +49,7 @@ class Context:
     risk: RiskGate
     switch: SwitchParams
     kelly: Mapping[str, float]
-    calibrated: bool
+    calibrated: Mapping[str, bool]  # per label; sizing is zero until a label passes
     frozen: bool
     equity: float
     position_qty: float  # from the broker, the source of truth
@@ -114,7 +114,7 @@ def _by_label(p: Vec, labels: list[str]) -> dict[str, float]:
     return out
 
 
-def _stretch(log_closes: list[float]) -> float:
+def stretch(log_closes: list[float]) -> float:
     if len(log_closes) < STRETCH_WINDOW:
         return math.nan
     a = np.array(log_closes[-STRETCH_WINDOW:])
@@ -151,7 +151,7 @@ def _exit_reason(pb: Playbook, st: EngineState, dec: SwitchDecision, sig: dict[s
     return None
 
 
-def _entry_signal(pb: Playbook, sig: dict[str, float]) -> bool:
+def entry_signal(pb: Playbook, sig: dict[str, float]) -> bool:
     if pb.style == "trend_following":
         return sig["trend"] > pb.entry_threshold
     if pb.style == "mean_reversion":
@@ -184,6 +184,8 @@ def on_candle(state: EngineState, candle: Candle, ctx: Context) -> tuple[EngineS
     sw = Switcher(ctx.switch, SwitchState.from_dict(st.switch))
     labels = ctx.model.labels
     signals: dict[str, float] = {}
+    state_next: list[float] = []
+    loglik: float | None = None
     dec: SwitchDecision
     if issue is BarIssue.BAD_VALUES:
         dec = sw.fail("bad candle values")
@@ -200,9 +202,11 @@ def on_candle(state: EngineState, candle: Candle, ctx: Context) -> tuple[EngineS
                 prev = None if st.alpha is None else np.array(st.alpha)
                 out = ctx.filt.step(prev, z)
                 st.alpha = out.probs.tolist()
+                state_next = out.next_probs.tolist()
+                loglik = out.loglik
             except (FilterError, ValueError) as e:
                 st.alpha, err = None, f"model error: {e}"
-            signals = {"trend": float(x[TREND]), "stretch": _stretch(st.log_closes)}
+            signals = {"trend": float(x[TREND]), "stretch": stretch(st.log_closes)}
         if err:
             dec = sw.fail(err)
         elif out is None:
@@ -231,7 +235,8 @@ def on_candle(state: EngineState, candle: Candle, ctx: Context) -> tuple[EngineS
     else:
         sized = target_fraction(SizeInputs(
             active=dec.active, probs=dec.probs, kelly=ctx.kelly.get(dec.active or "", 0.0),
-            playbook_max=pb.max_size, size_mult=dec.size_mult, calibrated=ctx.calibrated,
+            playbook_max=pb.max_size, size_mult=dec.size_mult,
+            calibrated=ctx.calibrated.get(dec.active or "", False),
         ))
         if ctx.position_qty > 0:
             why = _exit_reason(pb, st, dec, signals, candle.close, ctx.entry_price)
@@ -243,7 +248,7 @@ def on_candle(state: EngineState, candle: Candle, ctx: Context) -> tuple[EngineS
                 reasons.append(f"reduce to {sized:.3f}")
             else:
                 target = pos_frac
-        elif _entry_signal(pb, signals) and sized > 0:
+        elif entry_signal(pb, signals) and sized > 0:
             target = sized
             stop = candle.close * (1 - pb.stop_pct)
             tp = candle.close * (1 + pb.take_profit_pct)
@@ -285,6 +290,8 @@ def on_candle(state: EngineState, candle: Candle, ctx: Context) -> tuple[EngineS
         "next_probs": dec.next_probs,
         "target": target,
         "issue": issue.value if issue else None,
+        "state_next": state_next,
+        "loglik": loglik,
         "reason": "; ".join(r for r in reasons if r),
     }
     return st, StepResult(ts, decision, signals, orders, vetoes, approvals)

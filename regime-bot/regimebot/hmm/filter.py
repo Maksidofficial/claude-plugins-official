@@ -50,12 +50,13 @@ class RegimeFilter:
         if z.shape != (self.d,) or not np.all(np.isfinite(z)):
             raise FilterError(f"bad observation: shape={z.shape}")
         prior = self.model.startprob if prev is None else prev @ self.model.transmat
-        logb = self._log_emission(z)
-        m = float(logb.max())
-        w = prior * np.exp(logb - m)
+        with np.errstate(divide="ignore"):
+            logw = np.log(prior) + self._log_emission(z)  # log space: no underflow
+        m = float(logw.max())
+        if not math.isfinite(m):
+            raise FilterError("observation impossible under the model")
+        w = np.exp(logw - m)
         s = float(w.sum())
-        if not (s > 0 and math.isfinite(s)):
-            raise FilterError("filter normalizer is zero or non-finite")
         probs: Vec = w / s
         nxt: Vec = probs @ self.model.transmat
         return FilterOutput(probs=probs, next_probs=nxt, loglik=m + math.log(s))

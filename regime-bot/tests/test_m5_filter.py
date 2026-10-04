@@ -135,3 +135,22 @@ def test_smoothing_and_viterbi_are_banned_outside_fit() -> None:
                     assert all(not a.name.startswith("hmmlearn") for a in node.names), rel
                 if isinstance(node, ast.ImportFrom):
                     assert not (node.module or "").startswith("hmmlearn"), rel
+
+
+def test_unreachable_state_does_not_break_filter() -> None:
+    m = toy_model()
+    A = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+    zero = RegimeModel(np.array([1.0, 0.0, 0.0]), A, m.means, m.covars, m.scaler, 0.0)
+    f = RegimeFilter(zero)
+    o = f.step(None, m.means[0])
+    far = m.means[2] + 30 * (m.means[2] - m.means[0])  # only state 2 explains this at all
+    o = f.step(o.probs, far)
+    assert np.all(np.isfinite(o.probs)) and o.probs.sum() == pytest.approx(1.0)
+
+
+def test_fit_floors_transition_probabilities() -> None:
+    from regimebot.hmm.fit import TRANSMAT_FLOOR, floor_transmat
+
+    A = floor_transmat(np.array([[1.0, 0.0], [0.3, 0.7]]))
+    assert A.min() >= TRANSMAT_FLOOR * 0.99
+    np.testing.assert_allclose(A.sum(axis=1), 1.0)

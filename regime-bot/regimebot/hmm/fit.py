@@ -80,6 +80,15 @@ class RegimeModel:
         )
 
 
+TRANSMAT_FLOOR = 1e-6  # no regime change is ever "impossible" for the filter
+
+
+def floor_transmat(A: Vec) -> Vec:
+    out: Vec = np.maximum(A, TRANSMAT_FLOOR)
+    out = out / out.sum(axis=1, keepdims=True)
+    return out
+
+
 def expected_durations(transmat: Vec) -> Vec:
     out: Vec = 1.0 / (1.0 - np.diag(transmat))
     return out
@@ -141,10 +150,63 @@ def fit_regime_model(
     final = _fit_best(Z, k_star, restarts, seed)
     model = RegimeModel(
         startprob=np.asarray(final.startprob_, dtype=np.float64),
-        transmat=np.asarray(final.transmat_, dtype=np.float64),
+        transmat=floor_transmat(np.asarray(final.transmat_, dtype=np.float64)),
         means=np.asarray(final.means_, dtype=np.float64),
         covars=np.asarray(final.covars_, dtype=np.float64),
         scaler=scaler,
         loglik=float(final.score(Z)),
     )
     return model, SelectionReport(scores, k_star, n_train, len(hold))
+
+
+WARM_START_TOL = 0.01  # a random restart replaces the warm start only if >1% better LL
+
+
+def _warm_fit(Z: Vec, init: RegimeModel, scaler: Standardizer, seed: int) -> GaussianHMM | None:
+    """Start EM from the current model, re-expressed in the new scaler's units."""
+    raw_mu = init.means * init.scaler.std + init.scaler.mean
+    raw_cov = init.covars * np.outer(init.scaler.std, init.scaler.std)
+    m = GaussianHMM(
+        n_components=init.k, covariance_type="full", n_iter=300, tol=1e-5,
+        random_state=seed, init_params="",
+    )
+    m.startprob_ = init.startprob
+    m.transmat_ = init.transmat
+    m.means_ = (raw_mu - scaler.mean) / scaler.std
+    m.covars_ = raw_cov / np.outer(scaler.std, scaler.std)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            m.fit(Z)
+        return m if np.isfinite(m.score(Z)) else None
+    except (ValueError, np.linalg.LinAlgError):
+        return None
+
+
+def fit_k(
+    raw: Vec, k: int, restarts: int, seed: int, init: RegimeModel | None = None
+) -> RegimeModel:
+    """Refit with K fixed. Used by walk-forward refits; K itself changes only via review.
+
+    With ``init``, EM starts from the current model so states keep their identity across
+    refits; random restarts can only replace it with a clearly better fit.
+    """
+    if not np.all(np.isfinite(raw)):
+        raise ValueError("raw features contain NaN/inf")
+    scaler = Standardizer.fit(raw)
+    Z = scaler.transform(raw)
+    m = _fit_best(Z, k, restarts, seed)
+    if init is not None and init.k == k:
+        warm = _warm_fit(Z, init, scaler, seed)
+        if warm is not None:
+            ll_w, ll_r = float(warm.score(Z)), float(m.score(Z))
+            if ll_r - ll_w <= WARM_START_TOL * abs(ll_w):
+                m = warm
+    return RegimeModel(
+        startprob=np.asarray(m.startprob_, dtype=np.float64),
+        transmat=floor_transmat(np.asarray(m.transmat_, dtype=np.float64)),
+        means=np.asarray(m.means_, dtype=np.float64),
+        covars=np.asarray(m.covars_, dtype=np.float64),
+        scaler=scaler,
+        loglik=float(m.score(Z)),
+    )

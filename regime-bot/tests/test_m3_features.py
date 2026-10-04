@@ -15,7 +15,7 @@ from regimebot.data.features import (
 
 
 def test_feature_names() -> None:
-    assert FEATURES == ("logret", "rvol", "range", "volratio", "trend")
+    assert FEATURES == ("ret10", "rvol", "range5", "volratio5", "trend")
 
 
 def test_hand_computed_values(bars: pd.DataFrame) -> None:
@@ -23,10 +23,12 @@ def test_hand_computed_values(bars: pd.DataFrame) -> None:
     i = 120
     c, h, lo, v = (bars[k].to_numpy() for k in ("close", "high", "low", "volume"))
     lr = np.log(c[1:] / c[:-1])  # lr[j] is the return into bar j+1
-    assert f["logret"].iloc[i] == pytest.approx(math.log(c[i] / c[i - 1]))
+    assert f["ret10"].iloc[i] == pytest.approx(math.log(c[i] / c[i - 10]))
     assert f["rvol"].iloc[i] == pytest.approx(np.std(lr[i - 20 : i], ddof=1))
-    assert f["range"].iloc[i] == pytest.approx((h[i] - lo[i]) / c[i - 1])
-    assert f["volratio"].iloc[i] == pytest.approx(v[i] / v[i - 20 : i].mean())
+    rng = (h[1:] - lo[1:]) / c[:-1]  # rng[j] is the range of bar j+1
+    assert f["range5"].iloc[i] == pytest.approx(rng[i - 5 : i].mean())
+    expected = v[i - 4 : i + 1].mean() / v[i - 24 : i - 4].mean()
+    assert f["volratio5"].iloc[i] == pytest.approx(expected)
     lp = np.log(c)
     a = 2 / 51
     ema = [lp[0]]
