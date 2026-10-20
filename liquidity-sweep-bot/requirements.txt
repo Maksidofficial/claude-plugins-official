@@ -1,0 +1,6 @@
+numpy>=1.26
+pandas>=2.1
+# Optional: real-time liquidation stream (live/paper/record commands)
+websockets>=12
+# Optional: exchange execution (live --mode testnet|live)
+ccxt>=4.2
