@@ -1,0 +1,45 @@
+# Copy to config.toml and pass with --config config.toml.
+# Every key is optional; omitted keys use the defaults in sweepbot/config.py.
+
+symbol = "BTCUSDT"
+timeframe = "1h"
+atr_period = 14
+
+[levels]
+pivot_left = 5             # bars on each side that make a swing high/low
+pivot_right = 5            # pools are only known after these bars close (no lookahead)
+equal_tolerance_atr = 0.15 # merge nearby swings into one "equal highs/lows" pool
+max_age_bars = 500
+min_touches = 2            # trade only pools that were tested at least this often
+
+[sweep]
+min_penetration_atr = 0.05 # wick must run at least this far through the pool
+max_penetration_atr = 2.0  # deeper than this looks like a real breakout
+require_close_back = true  # candle must close back inside the level
+
+[cascade]
+mode = "auto"              # auto | liquidations | proxy | off
+lookback = 96
+min_history = 30
+window_bars = 2
+liq_zscore = 3.0           # liquidation spike threshold (real forced-order data)
+min_liq_notional = 0.0
+volume_zscore = 2.0        # proxy: volume spike...
+range_atr = 1.0            # ...plus range expansion
+
+[trade]
+min_rr = 2.5               # target = nearest opposing pool paying at least this
+fallback_rr = 2.5          # used when no pool qualifies; 0 = skip the trade
+stop_buffer_atr = 0.75     # stop distance beyond the sweep wick
+max_bars_in_trade = 48
+cooldown_bars = 3
+flip_on_opposite = true    # opposite sweep + cascade closes and reverses
+allow_long = true
+allow_short = true
+
+[risk]
+risk_per_trade = 0.01      # 1% of equity lost if the stop is hit
+max_leverage = 5.0
+fee_rate = 0.0004          # taker fee per side
+slippage_bps = 2.0
+max_daily_loss = 0.03      # stop opening trades after -3% in a UTC day
