@@ -104,38 +104,42 @@ including the US.
 
 ## Results so far
 
-All runs below are BTCUSDT perpetual, Oct 2025 to Oct 2026, with 0.04% taker
-fees and 2 bps slippage. They use **proxy** cascade detection, because the
-archive has no liquidation data.
+**Short version: no edge found.** All runs are BTCUSDT perpetual with 0.04%
+taker fees and 2 bps slippage. They use **proxy** cascade detection, because
+the archive has no liquidation data.
 
-| Setup | Trades | Return | Max DD | Profit factor |
+### Current defaults, Jan 2020 to Oct 2026
+
+| Timeframe | Trades | Return | Max DD | Profit factor |
 |---|---|---|---|---|
-| 15m, tight stops (0.25 ATR), any swing | 303 | −73% | −75% | 0.59 |
-| 15m, current defaults | 164 | −26% | −33% | 0.75 |
-| 1h, current defaults | 50 | +8% | −10% | 1.24 |
+| 1h | 320 | −49% | −55% | 0.70 |
+| 4h | 68 | −23% | −26% | 0.49 |
+| 1d | 8 | −4% | −5% | 0.26 |
 
-A scan of 64 configurations, tuned on Oct 2025 to May 2026 and tested on Jun
-to Oct 2026, found:
+### Parameter scan
 
-- Only 4 configurations were profitable in-sample, and 2 of those stayed
-  profitable out-of-sample.
-- Every one of them had about 30 trades. That is far too few to tell an edge
-  from luck.
-- The current defaults come from this same data, so the 1h row is
-  **optimistic**.
+For each of 1h, 4h and 1d, 64 configurations were tuned on 2020–2023 and
+tested on 2024–2026. The scan varied pivot size, minimum pool touches, stop
+buffer, `min_rr`, the volume threshold and the time stop.
 
-Consistent patterns from the scan:
+- **Not one of the 192 configurations was profitable in-sample.** The best
+  was a 4h setup that broke even on 2020–2023, then lost 17%
+  out-of-sample (profit factor 0.50).
+- On 1h and 4h, wider stops and longer time stops lose less, but nothing
+  crosses into profit.
+- 1d produces only about 10–25 trades over six years, too few to judge either
+  way.
 
-- **Higher timeframes beat lower ones.** On 15m, fees and noise swamp the
-  setup.
-- **Wider stops beat tight ones.** Stops just past the wick get swept by the
-  next wick.
-- **Multi-touch pools beat single swings.** Equal highs and lows hold more
-  resting liquidity.
+An earlier one-year test (Oct 2025 to Oct 2026) showed 1h at +8% with profit
+factor 1.24. The six-year run shows that was luck: the defaults had been
+picked on that same year.
+
+### What's still untested
 
 The core idea, a confirmed *liquidation* cascade, could not be tested on
-history. Record liquidations for a few weeks and backtest with
-`--liquidations` before you trust any of this.
+history. The volume and range proxy is clearly not enough on its own. Record
+real liquidations for a few weeks, then backtest with `--liquidations`, before
+you trust any of this.
 
 ## Layout
 

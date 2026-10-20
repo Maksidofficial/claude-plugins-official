@@ -124,14 +124,22 @@ def fetch_binance_klines(
     return df[~df.index.duplicated()].sort_index()
 
 
-def _archive_csv(url: str) -> pd.DataFrame | None:
-    try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "sweepbot"}), timeout=60) as r:
-            blob = r.read()
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return None
-        raise
+def _archive_csv(url: str, retries: int = 4) -> pd.DataFrame | None:
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "sweepbot"}), timeout=60) as r:
+                blob = r.read()
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
+            if attempt == retries or e.code < 500:
+                raise
+        except (urllib.error.URLError, OSError):
+            if attempt == retries:
+                raise
+        time.sleep(2 ** (attempt + 1))
+        log.warning("archive download failed, retrying: %s", url)
     with zipfile.ZipFile(io.BytesIO(blob)) as zf:
         raw = zf.read(zf.namelist()[0]).decode()
     has_header = raw.startswith("open_time")
